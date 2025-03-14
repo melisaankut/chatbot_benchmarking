@@ -30,7 +30,7 @@ def create_tree_from_excels(files_dict):
 
     # Load all sheets into dataframes
     data = {name: pd.ExcelFile(path) for name, path in files.items()}
-    dfs = {name: xls.parse(xls.sheet_names[0]) for name, xls in data.items()}  # Assuming first sheet in each file
+    dfs = {name: xls.parse(xls.sheet_names[0]) for name, xls in data.items()}  
 
     # Tree structure initialization
     tree = {}

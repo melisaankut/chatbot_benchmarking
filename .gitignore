@@ -3,6 +3,7 @@
 data/
 anomalies.csv
 tree_structure.json
+test_dataset.json
 
 
 # Byte-compiled / optimized / DLL files
