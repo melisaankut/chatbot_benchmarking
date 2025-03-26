@@ -1,9 +1,13 @@
 import json
 import pandas as pd
-from create_tree_structure import create_tree_from_excels
-from prompt_generation import generate_prompts
+import logging
 
-# Custom function to handle timestamp serialization
+from create_base_structures.create_tree_structure import create_tree_from_excels
+from create_base_structures.prompt_generation import generate_qa_pairs_from_tree, generate_qa_pairs_from_database
+
+logging.basicConfig(level=logging.INFO)
+
+
 def convert_timestamps(obj):
     if isinstance(obj, pd.Timestamp):
         return obj.isoformat()
@@ -13,8 +17,11 @@ def convert_timestamps(obj):
         return [convert_timestamps(i) for i in obj]
     return obj
 
+def save_json_to_file(data, filename):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
 def main():
-    # Define the file paths for Excel files
     file_paths = {
         "articles": "data/articles.xlsx",
         "materials": "data/materials.xlsx",
@@ -22,23 +29,21 @@ def main():
         "work_orders": "data/work_orders.xlsx"
     }
 
-    # Generate the tree structure
-    tree = create_tree_from_excels(file_paths)
+    try:
+        tree = create_tree_from_excels(file_paths)
+        tree_serialized = convert_timestamps(tree)
+        save_json_to_file(tree_serialized, "tree_structure.json")
+        logging.info("Tree structure successfully saved to 'tree_structure.json'.")
+    except Exception as e:
+        logging.error(f"Failed to generate tree structure: {e}")
+        return
 
-    # Convert and save the JSON tree structure
-    tree_serialized = convert_timestamps(tree)
+    try:
+        test_data = generate_qa_pairs_from_tree() + generate_qa_pairs_from_database()
+        save_json_to_file(test_data, "test_dataset.json")
+        logging.info("Test dataset has been generated and saved as 'test_dataset.json'.")
+    except Exception as e:
+        logging.error(f"Failed to generate test dataset: {e}")
 
-    with open("tree_structure.json", "w") as f:
-        json.dump(tree_serialized, f, indent=4)
-
-    print("Tree structure successfully saved to 'tree_structure.json'.")
-
-    test_data = generate_prompts()
-    with open("test_dataset.json", "w", encoding="utf-8") as f:
-        json.dump(test_data, f, indent=4)
-
-    print("Test dataset has been generated and saved as test_dataset.json.")
-
-# Run the script only if executed directly
 if __name__ == "__main__":
     main()
