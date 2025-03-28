@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import json
-# Example test data
 
 
 def merge_json_and_csv(json_path, csv_path):
@@ -48,7 +47,6 @@ def merge_json_and_csv(json_path, csv_path):
     return merged
 
 data = merge_json_and_csv("shuffled_100_samples.json", "response_texts.csv")
-print(data)
 
 # Load Sentence Embedding model
 embedder = SentenceTransformer('all-MiniLM-L6-v2')
@@ -87,8 +85,24 @@ def evaluate_example(ref, gen):
         "bleu": bleu_score(ref, gen),
         "rouge1": rouge['rouge1'].recall,
         "rougeL": rouge['rougeL'].recall,
-        "cosine": cosine_sim(ref, gen)
+        "cosine": cosine_sim(ref, gen),
+        "contains": contains_match(ref, gen)
     }
+def contains_match(reference, generated):
+    """
+    Checks whether the reference (ground truth) is a substring of the generated (chatbot) response.
+
+    Args:
+        reference (str): The expected correct answer (ground truth).
+        generated (str): The chatbot's response.
+
+    Returns:
+        int: 1 if reference is found in generated (case-insensitive), else 0.
+    """
+    if not isinstance(reference, str) or not isinstance(generated, str):
+        return 0  # In case of NaN or non-string inputs
+
+    return int(reference.strip().lower() in generated.strip().lower())
 
 
 def evaluate_dataset(data):
@@ -115,7 +129,8 @@ def evaluate_dataset(data):
             "BLEU": scores["bleu"],
             "ROUGE-1": scores["rouge1"],
             "ROUGE-L": scores["rougeL"],
-            "Cosine": scores["cosine"]
+            "Cosine": scores["cosine"],
+            "Contains Match": scores["contains"] 
         }
         records.append(record)
 
@@ -130,7 +145,7 @@ def print_average_scores(df):
         df (pd.DataFrame): The evaluation results.
     """
     print("\nAverage Evaluation Scores:")
-    for metric in ["Exact Match", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine"]:
+    for metric in ["Exact Match", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine", "Contains Match"]:
         avg = df[metric].mean()
         print(f"{metric:<16}: {avg:.4f}")
 
@@ -161,9 +176,10 @@ def plot_scores(df):
         df["BLEU"].mean(),
         df["ROUGE-1"].mean(),
         df["ROUGE-L"].mean(),
-        df["Cosine"].mean()
+        df["Cosine"].mean(),
+        df["Contains Match"].mean()
     ]
-    labels = ["Exact", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine"]
+    labels = ["Exact", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine", "Contains Match" ]
 
     sns.barplot(x=labels, y=avg_scores)
     plt.title("Average Evaluation Scores")
