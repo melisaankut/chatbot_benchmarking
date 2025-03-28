@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 import logging
-
+import random
 from create_base_structures.create_tree_structure import create_tree_from_excels
 from create_base_structures.prompt_generation import generate_qa_pairs_from_tree, generate_qa_pairs_from_database
 
@@ -44,6 +44,21 @@ def main():
         logging.info("Test dataset has been generated and saved as 'test_dataset.json'.")
     except Exception as e:
         logging.error(f"Failed to generate test dataset: {e}")
+
+
+        # Load the dataset
+    with open('test_dataset.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    # Shuffle
+    random.shuffle(data)
+
+    # Select 1000 samples
+    subset = data[:100]
+
+    # Save to a new JSON file
+    with open('shuffled_100_samples.json', 'w', encoding='utf-8') as f:
+        json.dump(subset, f, indent=4, ensure_ascii=False)
 
 if __name__ == "__main__":
     main()

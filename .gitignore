@@ -4,7 +4,10 @@ data/
 anomalies.csv
 tree_structure.json
 test_dataset.json
-
+response_texts.csv
+shuffled_100_samples.json
+shuffled_1000_samples.json
+.vscode
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

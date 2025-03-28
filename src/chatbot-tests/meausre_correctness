@@ -1,0 +1,180 @@
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from rouge_score import rouge_scorer
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import json
+# Example test data
+
+
+def merge_json_and_csv(json_path, csv_path):
+    """
+    Merges a JSON file (with true answers) and a CSV file (with chatbot responses)
+    into a single list of dictionaries in the format:
+    {"reference": ..., "generated": ...}
+    
+    Args:
+        json_path (str): Path to the JSON file.
+        csv_path (str): Path to the CSV file.
+        
+    Returns:
+        list[dict]: Merged data list.
+    """
+    # Load JSON
+    with open(json_path, 'r', encoding='utf-8') as f:
+        json_data = json.load(f)
+
+    # Load CSV
+    df = pd.read_csv(csv_path)
+
+    # Create a mapping from sentence → response
+    response_lookup = dict(zip(df['sentence'], df['response']))
+
+    # Merge based on question_typo (used in both)
+    merged = []
+    for item in json_data:
+        question = item['question']
+        reference = item['answer']
+        generated = response_lookup.get(question)
+
+        if pd.notna(reference) and pd.notna(generated):  # Filter out NaNs
+            merged.append({
+                "reference": str(reference).strip(),
+                "generated": str(generated).strip()
+            })
+
+    return merged
+
+data = merge_json_and_csv("shuffled_100_samples.json", "response_texts.csv")
+print(data)
+
+# Load Sentence Embedding model
+embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
+def exact_match(ref, gen):
+    return int(ref.strip().lower() == gen.strip().lower())
+
+def bleu_score(ref, gen):
+    smoothie = SmoothingFunction().method4
+    return sentence_bleu([ref.split()], gen.split(), smoothing_function=smoothie)
+
+def rouge_scores(ref, gen):
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+    return scorer.score(ref, gen)
+
+def cosine_sim(ref, gen):
+    embeddings = embedder.encode([ref, gen])
+    return cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
+
+
+
+def evaluate_example(ref, gen):
+    """
+    Evaluates a single reference-generated pair using various metrics.
+    
+    Args:
+        ref (str): The reference text.
+        gen (str): The generated text by the chatbot.
+        
+    Returns:
+        dict: A dictionary containing all metric scores.
+    """
+    rouge = rouge_scores(ref, gen)
+    return {
+        "exact": exact_match(ref, gen),
+        "bleu": bleu_score(ref, gen),
+        "rouge1": rouge['rouge1'].recall,
+        "rougeL": rouge['rougeL'].recall,
+        "cosine": cosine_sim(ref, gen)
+    }
+
+
+def evaluate_dataset(data):
+    """
+    Evaluates the full dataset and returns a DataFrame with scores for each example.
+
+    Args:
+        data (list): A list of dicts with "reference" and "generated" fields.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing all results.
+    """
+    records = []
+
+    for i, item in enumerate(data):
+        ref = item["reference"]
+        gen = item["generated"]
+        scores = evaluate_example(ref, gen)
+
+        record = {
+            "Reference": ref,
+            "Generated": gen,
+            "Exact Match": scores["exact"],
+            "BLEU": scores["bleu"],
+            "ROUGE-1": scores["rouge1"],
+            "ROUGE-L": scores["rougeL"],
+            "Cosine": scores["cosine"]
+        }
+        records.append(record)
+
+    return pd.DataFrame(records)
+
+
+def print_average_scores(df):
+    """
+    Prints the average scores across all examples.
+
+    Args:
+        df (pd.DataFrame): The evaluation results.
+    """
+    print("\nAverage Evaluation Scores:")
+    for metric in ["Exact Match", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine"]:
+        avg = df[metric].mean()
+        print(f"{metric:<16}: {avg:.4f}")
+
+
+def plot_scores(df):
+    """
+    Plots per-example and average scores.
+
+    Args:
+        df (pd.DataFrame): The evaluation results.
+    """
+    # Line plot per example
+    plt.figure(figsize=(10, 6))
+    plt.plot(df["BLEU"], label="BLEU")
+    plt.plot(df["ROUGE-1"], label="ROUGE-1")
+    plt.plot(df["Cosine"], label="Cosine")
+    plt.title("Evaluation Metrics Per Example")
+    plt.xlabel("Example #")
+    plt.ylabel("Score")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+    # Bar plot of averages
+    plt.figure(figsize=(8, 5))
+    avg_scores = [
+        df["Exact Match"].mean(),
+        df["BLEU"].mean(),
+        df["ROUGE-1"].mean(),
+        df["ROUGE-L"].mean(),
+        df["Cosine"].mean()
+    ]
+    labels = ["Exact", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine"]
+
+    sns.barplot(x=labels, y=avg_scores)
+    plt.title("Average Evaluation Scores")
+    plt.ylim(0, 1)
+    plt.ylabel("Score")
+    plt.show()
+
+
+# ---- Run the Evaluation ----
+
+results_df = evaluate_dataset(data)
+print("Columns in results_df:", results_df.columns.tolist())
+print_average_scores(results_df)
+plot_scores(results_df)
