@@ -34,66 +34,67 @@ MODEL = "prithivida/parrot_paraphraser_on_T5"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # --- Constants ---
-MAX_PER_TEMPLATE = 1     # per-template sample size
-MAX_TOTAL = 10          # global QA limit
+MAX_PER_TEMPLATE = 5     # per-template sample size
+MAX_TOTAL = 100          # global QA limit
+MAX_PER_ANALYTICAL_CATEGORY = 5  # or any number you prefer
 
 # Placeholder for RECORD_TYPES - adjust with your actual types/schemas
 RECORD_TYPES = {
-    "work_order": "work_order_schema",  # Replace with actual schema or identifier
-    "logbook": "logbook_schema",        # Replace with actual schema or identifier
-    "production_order": "production_order_schema" # Replace with actual schema or identifier
-    # Add other record types as needed
+    "work_order": ["workstation", "time"],
+    "logbook": ["status", "employee"],
+    "production_order": ["ordername", "price", "createdate", "deliverydate"]
 }
 
 # Category weights for balancing
 CATEGORY_WEIGHTS = {
-    # Basic Information Categories (Weight: 1.0)
+    # Order-related
     "order_info": 1.0,
     "order_description": 1.0,
     "order_status": 1.0,
     "order_progress": 1.0,
+    "order_workstation": 1.3,
+    "order_quantity": 1.3,
+    "order_price": 1.4,
+    "order_storage": 1.2,
     "company_id": 1.0,
-    
-    # Material and Stock Categories (Weight: 1.2)
+
+    # Material and Article
     "material_order_status": 1.2,
     "material_stock_level": 1.2,
     "material_storage": 1.2,
+    "material_requirements": 1.2,
+    "article_requirements": 1.2,
     "article_stock_quantity": 1.2,
     "article_storage": 1.2,
     "article_available_stock": 1.2,
-    
-    # Production Categories (Weight: 1.3)
-    "order_workstation": 1.3,
-    "order_quantity": 1.3,
-    "work_order_time": 1.3,
-    "work_order_stations": 1.3,
-    
-    # Cost and Price Categories (Weight: 1.4)
-    "order_price": 1.4,
     "article_cost": 1.4,
-    
-    # Delivery and Planning Categories (Weight: 1.5)
-    "delivery_date": 1.5,
-    "delivery_post_threshold": 1.5,
-    "delivery_2024_frequency": 1.5,
-    
-    # Drawing and Documentation Categories (Weight: 1.2)
+
+    # Drawing and Documentation
     "drawing_number": 1.2,
     "drawing_order_count": 1.2,
     "drawing_newest_order": 1.2,
     "drawing_first_order": 1.2,
-    
-    # Warehouse Categories (Weight: 1.3)
+
+    # Warehouse
     "warehouse_contents": 1.3,
     "warehouse_top10": 1.3,
     "warehouse_most_diverse": 1.3,
     "warehouse_sorted": 1.3,
-    
-    # Logbook Categories (Weight: 1.1)
+
+    # Logbook
     "logbook_reporter": 1.1,
     "logbook_status": 1.1,
-    
-    # Analytical Categories (Weight: 1.6)
+
+    # Work order
+    "work_order_time": 1.3,
+    "work_order_stations": 1.3,
+
+    # Delivery
+    "delivery_date": 1.5,
+    "delivery_post_threshold": 1.5,
+    "delivery_2024_frequency": 1.5,
+
+    # Analytical (from generate_analytical_answers)
     "process_flow": 1.6,
     "resource_optimization": 1.6,
     "quality_metrics": 1.6,
@@ -101,7 +102,7 @@ CATEGORY_WEIGHTS = {
     "inventory_management": 1.6,
     "production_planning": 1.6,
     "cross_reference": 1.6,
-    "performance_metrics": 1.6
+    "performance_metrics": 1.6,
 }
 
 
@@ -119,16 +120,10 @@ def save_json_to_file(data, filename):
 
 def validate_record(record: dict, record_type: str) -> Tuple[bool, dict]:
     """
-    Validates a record against a given type/schema.
+    Validates a record
     Returns (is_valid, validated_record_or_error).
     """
-    required_fields = {
-        RECORD_TYPES["work_order"]: ["workstation", "time"],  # Add more as needed
-        RECORD_TYPES["logbook"]: ["status", "employee"],      # Add more as needed
-        RECORD_TYPES["production_order"]: ["ordername", "price", "createdate", "deliverydate"],  # Add more as needed
-    }
-
-    # Check if record_type is known
+    required_fields = RECORD_TYPES
     if record_type not in required_fields:
         return False, {"error": f"Unknown record_type: {record_type}"}
 
@@ -911,9 +906,10 @@ def generate_qa_pairs_from_database():
     test_data = []  # container for all QA entries
     
     # Load raw dataframes from Excel
-    articles_df = pd.read_excel(r"data\\articles.xlsx")
-    materials_df = pd.read_excel(r"data\\materials.xlsx")
-    production_orders_df = pd.read_excel(r"data\\production_orders.xlsx")
+    data_dir = "data"
+    articles_path = os.path.join(data_dir, "articles.xlsx")
+    materials_df = pd.read_excel(os.path.join(data_dir, "materials.xlsx"))
+    production_orders_df = pd.read_excel(os.path.join(data_dir, "production_orders.xlsx"))
     
     # Prepare materials table: parse dates and find latest per material
     materials_df['createdate'] = pd.to_datetime(materials_df['createdate'], errors='coerce')
@@ -1287,7 +1283,7 @@ def generate_analytical_answers():
             # Track workstation sequence
             sequence = []
             for wo in work_orders:
-                is_valid, validated_wo = validate_record(wo, RECORD_TYPES["work_order"])
+                is_valid, validated_wo = validate_record(wo, "work_order")
                 if is_valid and validated_wo["workstation"]:
                     sequence.append(validated_wo["workstation"])
                     workstation_times[validated_wo["workstation"]].append(validated_wo["time"])
@@ -1307,7 +1303,7 @@ def generate_analytical_answers():
         
         # Process production orders for cost and quality analysis
         for prod in order_data.get("production_orders", []):
-            is_valid, validated_prod = validate_record(prod, RECORD_TYPES["production_order"])
+            is_valid, validated_prod = validate_record(prod, "production_order")
             if is_valid:
                 if validated_prod.get("price"):
                     order_costs[validated_prod["ordername"]].append(validated_prod["price"])
@@ -1319,7 +1315,7 @@ def generate_analytical_answers():
         
         # Process logbooks for quality issues
         for log in order_data.get("logbooks", []):
-            is_valid, validated_log = validate_record(log, RECORD_TYPES["logbook"])
+            is_valid, validated_log = validate_record(log, "logbook")
             if is_valid:
                 status = safe_lower(validated_log["status"])
                 if "error" in status or "issue" in status or "problem" in status:
@@ -1327,7 +1323,6 @@ def generate_analytical_answers():
     
     qa_pairs = []
     
-    MAX_PER_ANALYTICAL_CATEGORY = 1  # or any number you prefer
 
     # 1. Process Flow Analysis
     sequence_keys = list(workstation_sequences.keys())
