@@ -1,0 +1,15 @@
+import json
+
+# 1) Orijinal JSON dosyasını oku
+with open('test_dataset.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+
+# 2) Her objeye 1’den başlayan sıra numarası ekle
+for idx, item in enumerate(data, start=1):
+    item['numara'] = idx
+
+# 3) Sonuçları yeni bir dosyaya yaz
+with open('data_numbered.json', 'w', encoding='utf-8') as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+
+print(f"{len(data)} kayıt numaralandırılarak 'data_numbered.json' dosyasına yazıldı.")

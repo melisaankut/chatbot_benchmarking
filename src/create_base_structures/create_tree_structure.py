@@ -15,6 +15,8 @@ def create_tree_from_excels(files_dict):
             "materials": "materials.xlsx",
             "production_orders": "production_orders.xlsx",
             "work_orders": "work_orders.xlsx"
+            "logbooks": "logbook.xlsx",
+            "stock": "stock.xlsx",
         }
 
     Returns:
@@ -71,5 +73,28 @@ def create_tree_from_excels(files_dict):
                         prod_order["articles"] = []
                     prod_order["articles"].append(row.to_dict())
 
-    return tree
+    # Step 5: Add stock data based on articelnumber-productid
+    for _, stock_row in dfs["stock"].iterrows():
+        artno = stock_row["artno"]
+        for order in tree.values():
+            for prod_order in order.get("production_orders", []):
+                for article in prod_order.get("articles", []):
+                    if article.get("productid") == artno:
+                        article["stockdata"] = {
+                            "place": stock_row["place"],
+                            "amount": stock_row["amount"],
+                            "warehouse": stock_row["warehouse"],
+                            "createdate": stock_row["createdate"],
+                            "changedate": stock_row["changedate"],
+                        }
 
+    # Step 6: Add Logbook data based on orderid
+    for _, row in dfs["logbooks"].iterrows():
+        orderid = row["orderid"]
+        if orderid not in tree:
+            tree[orderid] = {"logbooks": []}
+        if "logbooks" not in tree[orderid]:
+            tree[orderid]["logbooks"] = []
+        tree[orderid]["logbooks"].append(row.to_dict())
+    
+    return tree

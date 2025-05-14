@@ -46,10 +46,12 @@ def merge_json_and_csv(json_path, csv_path):
 
     return merged
 
-data = merge_json_and_csv("shuffled_100_samples.json", "response_texts.csv")
-
+data = merge_json_and_csv("shuffled_100_samples_just_typo.json", "response_texts_typo.csv")
+print(data[:5])  # Print first 5 entries for verification
 # Load Sentence Embedding model
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
+#embedder = SentenceTransformer('all-MiniLM-L6-v2')
+embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 def exact_match(ref, gen):
     return int(ref.strip().lower() == gen.strip().lower())
@@ -66,7 +68,21 @@ def cosine_sim(ref, gen):
     embeddings = embedder.encode([ref, gen])
     return cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
 
+def contains_match(reference, generated):
+    """
+    Checks whether the reference (ground truth) is a substring of the generated (chatbot) response.
 
+    Args:
+        reference (str): The expected correct answer (ground truth).
+        generated (str): The chatbot's response.
+
+    Returns:
+        int: 1 if reference is found in generated (case-insensitive), else 0.
+    """
+    if not isinstance(reference, str) or not isinstance(generated, str):
+        return 0  # In case of NaN or non-string inputs
+
+    return int(reference.strip().lower() in generated.strip().lower())
 
 def evaluate_example(ref, gen):
     """
@@ -86,23 +102,47 @@ def evaluate_example(ref, gen):
         "rouge1": rouge['rouge1'].recall,
         "rougeL": rouge['rougeL'].recall,
         "cosine": cosine_sim(ref, gen),
-        "contains": contains_match(ref, gen)
+        "contains": contains_match(ref, gen),
+        "hybrid": hybrid_correctness_score(ref, gen)
     }
-def contains_match(reference, generated):
+
+def hybrid_correctness_score(reference, generated, weight_semantic=0.5, weight_token_f1=0.5):
     """
-    Checks whether the reference (ground truth) is a substring of the generated (chatbot) response.
+    Returns a hybrid score combining:
+    - Inclusion (reference in generated)
+    - Semantic similarity (cosine)
+    - Token overlap (F1-style)
 
-    Args:
-        reference (str): The expected correct answer (ground truth).
-        generated (str): The chatbot's response.
-
-    Returns:
-        int: 1 if reference is found in generated (case-insensitive), else 0.
+    Returns 0 if reference is not present in generated.
     """
     if not isinstance(reference, str) or not isinstance(generated, str):
-        return 0  # In case of NaN or non-string inputs
+        return 0.0
 
-    return int(reference.strip().lower() in generated.strip().lower())
+    reference = reference.strip().lower()
+    generated = generated.strip().lower()
+
+    # 1. Hard constraint: inclusion
+    if reference not in generated:
+        return 0.0
+
+    # 2. Semantic similarity
+    embeddings = embedder.encode([reference, generated])
+    cosine_score = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
+
+    # 3. Token-level overlap
+    ref_tokens = set(reference.split())
+    gen_tokens = set(generated.split())
+    common = ref_tokens.intersection(gen_tokens)
+
+    if not common:
+        token_f1 = 0.0
+    else:
+        precision = len(common) / len(gen_tokens)
+        recall = len(common) / len(ref_tokens)
+        token_f1 = 2 * precision * recall / (precision + recall)
+
+    # Combine
+    return round(weight_semantic * cosine_score + weight_token_f1 * token_f1, 4)
 
 
 def evaluate_dataset(data):
@@ -130,7 +170,8 @@ def evaluate_dataset(data):
             "ROUGE-1": scores["rouge1"],
             "ROUGE-L": scores["rougeL"],
             "Cosine": scores["cosine"],
-            "Contains Match": scores["contains"] 
+            "Contains Match": scores["contains"],
+            "Hybrid Correctness": scores["hybrid"]
         }
         records.append(record)
 
@@ -145,7 +186,7 @@ def print_average_scores(df):
         df (pd.DataFrame): The evaluation results.
     """
     print("\nAverage Evaluation Scores:")
-    for metric in ["Exact Match", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine", "Contains Match"]:
+    for metric in ["Exact Match", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine", "Contains Match", "Hybrid Correctness"]:
         avg = df[metric].mean()
         print(f"{metric:<16}: {avg:.4f}")
 
@@ -177,9 +218,10 @@ def plot_scores(df):
         df["ROUGE-1"].mean(),
         df["ROUGE-L"].mean(),
         df["Cosine"].mean(),
-        df["Contains Match"].mean()
+        df["Contains Match"].mean(),
+        df["Hybrid Correctness"].mean()
     ]
-    labels = ["Exact", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine", "Contains Match" ]
+    labels = ["Exact", "BLEU", "ROUGE-1", "ROUGE-L", "Cosine", "Contains Match", "Hybrid" ]
 
     sns.barplot(x=labels, y=avg_scores)
     plt.title("Average Evaluation Scores")
@@ -187,6 +229,50 @@ def plot_scores(df):
     plt.ylabel("Score")
     plt.show()
 
+
+
+
+
+def evaluate_chatbot_responses(original_csv, typo_csv):
+    # Load both CSV files
+    df_original = pd.read_csv(original_csv)
+    df_typo = pd.read_csv(typo_csv)
+
+    # Normalize the responses
+    df_original['response_norm'] = df_original['response'].astype(str).str.strip().str.lower()
+    df_typo['response_norm'] = df_typo['response'].astype(str).str.strip().str.lower()
+
+    
+    df_result = pd.DataFrame({
+        "original_question": df_original['sentence'],
+        "typo_question": df_typo['sentence'],
+        "original_response": df_original['response'],
+        "typo_response": df_typo['response'],
+        "match": df_original['response_norm'] == df_typo['response_norm']
+    })
+
+    # Calculate accuracy
+    total = len(df_result)
+    correct = df_result['match'].sum()
+    incorrect = total - correct
+    accuracy = (correct / total) * 100
+
+    print(f"Total: {total}, Correct: {correct}, Incorrect: {incorrect}, Accuracy: {accuracy:.2f}%")
+
+    # Plot pie chart of matching results
+    plt.figure(figsize=(6,6))
+    plt.pie([correct, incorrect], labels=['Correct', 'Incorrect'], autopct='%1.1f%%', startangle=90)
+    plt.title('Typo vs Original Question Response Accuracy')
+    plt.axis('equal')
+    plt.show()
+
+    # Optional: Save the comparison results to a CSV
+    df_result.to_csv("comparison_result.csv", index=False)
+
+    return df_result
+
+
+#evaluate_chatbot_responses("shuffled_100_samples_just_typo.json", "response_texts_typo.csv")
 
 # ---- Run the Evaluation ----
 
