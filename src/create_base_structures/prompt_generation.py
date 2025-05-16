@@ -907,7 +907,7 @@ def generate_qa_pairs_from_database():
     
     # Load raw dataframes from Excel
     data_dir = "data"
-    articles_path = os.path.join(data_dir, "articles.xlsx")
+    articles_df = pd.read_excel(os.path.join(data_dir, "articles.xlsx"))
     materials_df = pd.read_excel(os.path.join(data_dir, "materials.xlsx"))
     production_orders_df = pd.read_excel(os.path.join(data_dir, "production_orders.xlsx"))
     
