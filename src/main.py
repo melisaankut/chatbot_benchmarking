@@ -3,7 +3,10 @@ import pandas as pd
 import logging
 import random
 from create_base_structures.create_tree_structure import create_tree_from_excels
-from create_base_structures.prompt_generation import generate_qa_pairs_from_tree, generate_qa_pairs_from_database, generate_balanced_test_dataset
+from create_base_structures.prompt_generation import (
+    generate_balanced_test_dataset,
+    generate_english_only_dataset
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,6 +39,7 @@ def main():
     output_files = {
         "tree": "tree_structure.json",
         "full_dataset": "test_dataset.json",
+        "english_only": "test_dataset_english.json",
         "subset": "shuffled_100_samples.json"
     }
 
@@ -53,6 +57,12 @@ def main():
         save_json_to_file(balanced_dataset, output_files["full_dataset"])
         logging.info(f"Full test dataset saved to '{output_files['full_dataset']}'")
 
+        # Step 2b: Generate and save English-only version
+        logging.info("Generating English-only dataset...")
+        english_dataset = generate_english_only_dataset()
+        save_json_to_file(english_dataset, output_files["english_only"])
+        logging.info(f"English-only dataset saved to '{output_files['english_only']}'")
+
         # Step 3: Create subset of 100 samples
         logging.info("Creating subset of 100 samples...")
         random.shuffle(balanced_dataset)
@@ -63,6 +73,7 @@ def main():
         # Log dataset statistics
         logging.info(f"Total questions in balanced dataset: {len(balanced_dataset)}")
         logging.info(f"Questions in subset: {len(subset)}")
+        logging.info(f"Questions in English-only dataset: {len(english_dataset)}")
 
     except Exception as e:
         logging.error(f"An error occurred: {str(e)}")

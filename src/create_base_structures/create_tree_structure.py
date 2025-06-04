@@ -25,6 +25,7 @@ def create_tree_from_excels(files_dict):
         A nested dictionary representing the tree structure where:
         - `orderid` is the main key that connects `production_orders`, `work_orders`, and `materials`.
         - `articlenumber` from `production_orders` links to `productid` from `articles`.
+        - `artno` from `stock` links to `productid` from `articles`.
     """
     
     # Load the Excel files 
@@ -37,13 +38,12 @@ def create_tree_from_excels(files_dict):
     # Tree structure initialization
     tree = {}
 
-    # Step 1: Create the Production Orderstree
+    # Step 1: Create the Production Orders tree
     for _, row in dfs["production_orders"].iterrows():
         orderid = row["orderid"]
         if orderid not in tree:
             tree[orderid] = {"production_orders": []}
         tree[orderid]["production_orders"].append(row.to_dict())
-
 
     # Step 2: Add Work Orders data
     for _, row in dfs["work_orders"].iterrows():

@@ -7,6 +7,8 @@ import seaborn as sns
 import pandas as pd
 import json
 
+# Load Sentence Embedding model
+embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 def merge_json_and_csv(json_path, csv_path):
     """
@@ -45,13 +47,6 @@ def merge_json_and_csv(json_path, csv_path):
             })
 
     return merged
-
-data = merge_json_and_csv("shuffled_100_samples_just_typo.json", "response_texts_typo.csv")
-print(data[:5])  # Print first 5 entries for verification
-# Load Sentence Embedding model
-
-#embedder = SentenceTransformer('all-MiniLM-L6-v2')
-embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 def exact_match(ref, gen):
     return int(ref.strip().lower() == gen.strip().lower())
@@ -276,7 +271,7 @@ def evaluate_chatbot_responses(original_csv, typo_csv):
 
 # ---- Run the Evaluation ----
 
-results_df = evaluate_dataset(data)
-print("Columns in results_df:", results_df.columns.tolist())
-print_average_scores(results_df)
-plot_scores(results_df)
+#results_df = evaluate_dataset(data)
+#print("Columns in results_df:", results_df.columns.tolist())
+#print_average_scores(results_df)
+#plot_scores(results_df)
